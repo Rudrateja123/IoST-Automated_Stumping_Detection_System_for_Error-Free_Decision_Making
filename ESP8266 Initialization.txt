@@ -1,0 +1,84 @@
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+
+// Wi-Fi credentials
+const char* ssid = "Pink 1st floor_5G";
+const char* password = "sathvik@123";
+
+// ThingSpeak credentials
+const char* server = "api.thingspeak.com";
+const char* writeAPIKey = "OE7IHDVB97V0P13D";
+
+void setup() {
+  Serial.begin(115200); // For communication with Arduino
+  Serial.println("Initializing ESP8266...");
+
+  // Connect to Wi-Fi
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Connecting to Wi-Fi...");
+  }
+  Serial.println("Wi-Fi connected.");
+}
+
+void loop() {
+  if (WiFi.status() == WL_CONNECTED) {
+    if (Serial.available()) {
+      // Read data from Arduino
+      String data = Serial.readStringUntil('\n');
+      data.trim(); // Remove extra spaces or line breaks
+      int commaIndex = data.indexOf(',');
+
+      if (commaIndex > 0) {
+        String accMagnitude = data.substring(0, commaIndex);
+        String tofDistance = data.substring(commaIndex + 1);
+
+        Serial.println("Data received:");
+        Serial.print("Accelerometer Magnitude: ");
+        Serial.println(accMagnitude);
+        Serial.print("ToF Distance: ");
+        Serial.println(tofDistance);
+
+        // Send data to ThingSpeak
+        if (sendToThingSpeak(accMagnitude, tofDistance)) {
+          Serial.println("Data sent to ThingSpeak successfully.");
+        } else {
+          Serial.println("Failed to send data to ThingSpeak.");
+        }
+      }
+    }
+  } else {
+    Serial.println("Wi-Fi disconnected. Attempting to reconnect...");
+    WiFi.begin(ssid, password);
+    delay(1000);
+  }
+  delay(2000); // Delay before next loop iteration
+}
+
+bool sendToThingSpeak(String accMagnitude, String tofDistance) {
+  WiFiClient client;
+  if (!client.connect(server, 80)) {
+    Serial.println("Connection to ThingSpeak failed.");
+    return false;
+  }
+
+  // Construct HTTP GET request
+  String url = "/update?api_key=" + String(writeAPIKey) +
+               "&field1=" + accMagnitude +
+               "&field2=" + tofDistance;
+
+  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+               "Host: " + server + "\r\n" +
+               "Connection: close\r\n\r\n");
+
+  // Wait for server response
+  while (client.connected() || client.available()) {
+    if (client.available()) {
+      String response = client.readString();
+      Serial.println("ThingSpeak response: " + response);
+    }
+  }
+  client.stop();
+  return true;
+}
