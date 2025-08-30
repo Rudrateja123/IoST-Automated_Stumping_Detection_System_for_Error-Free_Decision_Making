@@ -46,7 +46,7 @@ The system uses **Time-of-Flight (ToF) sensors** and an **accelerometer** to ana
 |----------|-------------------|-------------------|----------------|----------|
 | 0        | 4.8               | 25                | Constant       | Not Out  |
 | 1        | 5.6               | 35                | Blinking       | Out      |
-| 2        | 3.9               | -1                | Blinking       | Out      |
+| 2        | 5.9               | -1                | Blinking       | Out      |
 | 3        | 6.2               | 20                | Constant       | Not Out  |
 | ...      | ...               | ...               | ...            | ...      |
 
