@@ -1,0 +1,155 @@
+#include <Adafruit_ADXL345_U.h>
+#include <Adafruit_VL53L0X.h>
+
+// Define sensor and LED pins
+#define LED_PIN_1 8
+#define LED_PIN_2 7
+#define LED_PIN_3 6
+#define BLINK_DELAY 200
+#define DIST_THRESHOLD 30.0
+#define IDLE_TIME 30000
+
+// Initialize sensors
+Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified();
+Adafruit_VL53L0X lox = Adafruit_VL53L0X();
+
+// Variables for accelerometer and distance
+unsigned long lastDisturbanceTime = 0;
+bool accelerometerIdle = false;
+bool referenceSet = false;
+sensors_event_t initialReference; // Struct to hold reference position
+
+void setup() {
+  // Setup Serial for ESP8266 communication
+  Serial.begin(9600); // Communication with ESP8266
+  Serial.println("Arduino Initialized!");
+
+  // Setup LEDs
+  pinMode(LED_PIN_1, OUTPUT);
+  pinMode(LED_PIN_2, OUTPUT);
+  pinMode(LED_PIN_3, OUTPUT);
+  digitalWrite(LED_PIN_1, LOW);
+  digitalWrite(LED_PIN_2, LOW);
+  digitalWrite(LED_PIN_3, LOW);
+
+  // Initialize accelerometer
+  if (!accel.begin()) {
+    Serial.println("Failed to initialize ADXL345 accelerometer.");
+    while (1);
+  }
+  accel.setRange(ADXL345_RANGE_16_G);
+
+  // Initialize ToF sensor
+  if (!lox.begin()) {
+    Serial.println("Failed to initialize VL53L0X ToF sensor.");
+    while (1);
+  }
+
+  // Initial reference setting
+  setNewReference();
+  Serial.println("Initial reference position set.");
+}
+
+void loop() {
+  if (accelerometerIdle && (millis() - lastDisturbanceTime < IDLE_TIME)) {
+    return;
+  } else if (millis() - lastDisturbanceTime >= IDLE_TIME && !referenceSet) {
+    // Set a new reference after idle period ends
+    setNewReference();
+    referenceSet = true;
+    accelerometerIdle = false;
+  }
+
+  sensors_event_t event;
+  accel.getEvent(&event);
+
+  // Check for disturbance
+  if (detectSignificantDisturbance(event)) {
+    Serial.println("Disturbance detected!");
+    measureDistanceAndControlLEDs();
+
+    accelerometerIdle = true;
+    lastDisturbanceTime = millis();
+    referenceSet = false; // Allow setting a new reference after next idle period
+  }
+}
+
+bool detectSignificantDisturbance(sensors_event_t &event) {
+  return abs(event.acceleration.x - initialReference.acceleration.x) > 4.0 ||
+         abs(event.acceleration.y - initialReference.acceleration.y) > 4.0 ||
+         abs(event.acceleration.z - initialReference.acceleration.z) > 4.0;
+}
+
+void setNewReference() {
+  accel.getEvent(&initialReference);
+  Serial.println("New reference position set.");
+}
+
+void measureDistanceAndControlLEDs() {
+  VL53L0X_RangingMeasurementData_t measure;
+  lox.rangingTest(&measure, false);
+
+  if (measure.RangeStatus != 4) {
+    float distance = measure.RangeMilliMeter / 10.0;
+    Serial.print("Distance measured: ");
+    Serial.print(distance);
+    Serial.println(" cm");
+
+    float accMagnitude = calculateMagnitude();
+    Serial.print("Acceleration Magnitude: ");
+    Serial.println(accMagnitude);
+
+    // Send data to ESP8266
+    sendToESP8266(accMagnitude, distance);
+
+    if (distance < DIST_THRESHOLD) {
+      turnOnLedConstantly(10000);
+    } else {
+      blinkLed(10000);
+    }
+  } else {
+    Serial.println("Error reading distance from ToF sensor. Considering out of range.");
+    blinkLed(10000);
+  }
+}
+
+float calculateMagnitude() {
+  sensors_event_t event;
+  accel.getEvent(&event);
+
+  return sqrt(pow(event.acceleration.x, 2) +
+              pow(event.acceleration.y, 2) +
+              pow(event.acceleration.z, 2));
+}
+
+void sendToESP8266(float accMagnitude, float tofDistance) {
+  String data = String(accMagnitude) + "," + String(tofDistance);
+  Serial.println("Sending to ESP8266: " + data);
+  Serial.println(data); // ESP8266 reads this via Serial
+}
+
+void turnOnLedConstantly(unsigned long duration) {
+  unsigned long startTime = millis();
+  while (millis() - startTime < duration) {
+    digitalWrite(LED_PIN_1, HIGH);
+    digitalWrite(LED_PIN_2, HIGH);
+    digitalWrite(LED_PIN_3, HIGH);
+  }
+  digitalWrite(LED_PIN_1, LOW);
+  digitalWrite(LED_PIN_2, LOW);
+  digitalWrite(LED_PIN_3, LOW);
+}
+
+void blinkLed(unsigned long duration) {
+  unsigned long startTime = millis();
+  while (millis() - startTime < duration) {
+    digitalWrite(LED_PIN_1, HIGH);
+    digitalWrite(LED_PIN_2, HIGH);
+    digitalWrite(LED_PIN_3, HIGH);
+    delay(BLINK_DELAY);
+    digitalWrite(LED_PIN_1, LOW);
+    digitalWrite(LED_PIN_2, LOW);
+    digitalWrite(LED_PIN_3, LOW);
+    delay(BLINK_DELAY);
+  }
+}
