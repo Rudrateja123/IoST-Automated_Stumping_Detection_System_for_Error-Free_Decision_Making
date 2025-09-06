@@ -77,7 +77,7 @@ The system uses **Time-of-Flight (ToF) sensors** and an **accelerometer** to ana
 ---
 
 ## 📄 Publication
-- *IoST: Automated Stumping Detection System for Error-Free Decision Making* – IEEE (Accepted, 2025)
+- [*IoST: Automated Stumping Detection System for Error-Free Decision Making*](https://ieeexplore.ieee.org/document/11077022) – IEEE (Accepted, 2025)
 
 ---
 
